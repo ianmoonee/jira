@@ -5,6 +5,7 @@ import os
 import time
 from tkinter import Tk, Label, Listbox, Button, Entry, filedialog, messagebox, Scrollbar, END, MULTIPLE, Frame
 from tkinter import ttk  # Import ttk for themed widgets
+from tkinter import simpledialog  # Import simpledialog
 
 # === CONFIG ===
 JIRA_DOMAIN = 'https://jira.critical.pt'
@@ -215,9 +216,7 @@ class JiraLoggerApp:
             messagebox.showerror("Error", f"Failed to process the file: {str(e)}")
 
     def simple_input_dialog(self, title, prompt):
-        input_dialog = Tk()
-        input_dialog.withdraw()
-        return input_dialog.simpledialog.askstring(title, prompt)
+        return simpledialog.askstring(title, prompt)  # Use simpledialog directly
 
 # === MAIN ===
 if __name__ == "__main__":

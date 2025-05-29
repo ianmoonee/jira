@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Upload Task File</title>
+</head>
+<body>
+    <h1>Upload Task File</h1>
+    <form method="post" enctype="multipart/form-data">
+        <input type="file" name="file" required>
+        <button type="submit">Upload and Log</button>
+    </form>
+    <a href="{{ url_for('index') }}">Back</a>
+</body>
+</html>

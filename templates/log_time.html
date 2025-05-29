@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Log Time for {{ issue_key }}</title>
+</head>
+<body>
+    <h1>Log Time for {{ issue_key }}</h1>
+    <form method="post">
+        <label>Time Spent (e.g., 1h, 30m): <input type="text" name="time_spent" required></label><br>
+        <label>Start Date (YYYY-MM-DD HH:MM, blank for now): <input type="text" name="date_input"></label><br>
+        <button type="submit">Log Time</button>
+    </form>
+    <a href="{{ url_for('index') }}">Back</a>
+</body>
+</html>

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Log Time for Selected Tasks</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+</head>
+<body>
+<div class="container mt-5">
+    <h2>Log Time for Selected Tasks</h2>
+    {% if dry_run %}
+        <div class="alert alert-info">
+            <h5>Dry Run: Please confirm the following log operation</h5>
+            <p>You are about to log <strong>{{ time_spent }}</strong> at <strong>{{ date_input if date_input else 'now' }}</strong> for the following tasks:</p>
+            <ul>
+                {% for key, summary in selected_task_info %}
+                    <li><b>{{ key }}</b>: {{ summary }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        <form method="post">
+            {% for key, summary in selected_task_info %}
+                <input type="hidden" name="selected_tasks" value="{{ key }}">
+            {% endfor %}
+            <input type="hidden" name="time_spent" value="{{ time_spent }}">
+            <input type="hidden" name="date_input" value="{{ date_input }}">
+            <button type="submit" name="confirm" value="1" class="btn btn-success">Confirm and Log Time</button>
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">Cancel</a>
+        </form>
+    {% else %}
+        <form method="post">
+            {% for key, summary in selected_task_info %}
+                <input type="hidden" name="selected_tasks" value="{{ key }}">
+            {% endfor %}
+            <div class="mb-3">
+                <label for="time_spent" class="form-label">Time Spent (e.g., 1h, 30m):</label>
+                <input type="text" class="form-control" id="time_spent" name="time_spent" required value="{{ time_spent if time_spent else '' }}">
+            </div>
+            <div class="mb-3">
+                <label for="date_input" class="form-label">Start Date (HH:MM DD-MM-YYYY, default is now):</label>
+                <input type="text" class="form-control" id="date_input" name="date_input" value="{{ date_input if date_input else '' }}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Selected Tasks:</label>
+                <ul>
+                    {% for key, summary in selected_task_info %}
+                        <li><b>{{ key }}</b>: {{ summary }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            <button type="submit" class="btn btn-primary">Dry Run</button>
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">Cancel</a>
+        </form>
+    {% endif %}
+</div>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script>
+flatpickr("#date_input", {
+    enableTime: true,
+    dateFormat: "H:i d-m-Y",
+    time_24hr: true,
+    defaultDate: document.getElementById('date_input').value || new Date(),
+});
+</script>
+</body>
+</html>

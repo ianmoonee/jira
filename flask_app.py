@@ -3,6 +3,8 @@ import requests
 import datetime
 import os
 import re
+import pandas as pd
+from jiraLogger import get_excel_entry
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'  # Change this!
@@ -72,20 +74,20 @@ def index():
     filter_keyword = request.form.get('filter', '').lower() if request.method == 'POST' else request.args.get('filter', '').lower()
     tasks = []
     error = None
-    if (request.method == 'POST' and filter_keyword) or (request.method == 'GET' and filter_keyword):
-        # If filtering, fetch tasks and filter
+    fetch_requested = (request.method == 'GET' and request.args.get('fetch') == '1')
+    filter_requested = (request.method == 'POST' and filter_keyword) or (request.method == 'GET' and filter_keyword)
+
+    if fetch_requested or filter_requested:
+        # Fetch from JIRA and do NOT store in session
         tasks, error = get_assigned_tasks()
         if error:
             flash(error, 'danger')
             tasks = []
         if filter_keyword:
             tasks = [t for t in tasks if filter_keyword in t['fields']['summary'].lower()]
-    elif request.method == 'GET' and request.args.get('fetch') == '1':
-        # Only fetch tasks if fetch=1 in query string
-        tasks, error = get_assigned_tasks()
-        if error:
-            flash(error, 'danger')
-            tasks = []
+    else:
+        # If not fetching/filtering, do not use session, just show empty or prompt user to fetch
+        tasks = []
     # Sorting
     if tasks:
         reverse = (sort_order == 'desc')
@@ -97,58 +99,34 @@ def index():
 
 @app.route('/log_time/<issue_key>', methods=['GET', 'POST'])
 def log_time(issue_key):
+    time_spent = ''
+    date_input = ''
+    dry_run = False
+    # Fetch summary for the issue_key
+    all_tasks, _ = get_assigned_tasks()
+    summary = next((t['fields']['summary'] for t in all_tasks if t['key'] == issue_key), '')
     if request.method == 'POST':
-        time_spent = request.form['time_spent']
-        date_input = request.form['date_input']
-        try:
-            if date_input:
-                started = datetime.datetime.strptime(date_input, "%Y-%m-%d %H:%M").strftime('%Y-%m-%dT%H:%M:%S.000+0000')
-            else:
-                started = datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S.000+0000')
-        except ValueError:
-            flash("Invalid date format. Use YYYY-MM-DD HH:MM.", 'danger')
-            return redirect(request.url)
-        success, msg = log_work(issue_key, time_spent, started)
-        flash(msg, 'success' if success else 'danger')
-        return redirect(url_for('index'))
-    return render_template('log_time.html', issue_key=issue_key)
-
-@app.route('/upload_file', methods=['GET', 'POST'])
-def upload_file():
-    if request.method == 'POST':
-        file = request.files.get('file')
-        if not file:
-            flash("No file selected.", 'danger')
-            return redirect(request.url)
-        lines = file.read().decode('utf-8').splitlines()
-        tasks, _ = get_assigned_tasks()
-        summary_to_key = {t['fields']['summary']: t['key'] for t in tasks}
-        dry_run_results = []
-        for line in lines:
-            parts = line.strip().split(',')
-            if len(parts) != 3:
-                flash(f"Invalid line format: {line.strip()}", 'danger')
-                continue
-            task_name, time_spent, date_input = parts
-            issue_key = summary_to_key.get(task_name)
-            if not issue_key:
-                flash(f"Task not found: {task_name}", 'danger')
-                continue
+        time_spent = request.form.get('time_spent', '')
+        date_input = request.form.get('date_input', '')
+        if 'dry_run' in request.form:
+            # Just show dry run summary
+            dry_run = True
+            return render_template('log_time.html', issue_key=issue_key, summary=summary, time_spent=time_spent, date_input=date_input, dry_run=True)
+        elif 'confirm' in request.form:
+            # Actually log time
             try:
-                started = datetime.datetime.strptime(date_input, "%Y-%m-%d %H:%M").strftime('%Y-%m-%dT%H:%M:%S.000+0000')
+                if date_input:
+                    started = datetime.datetime.strptime(date_input, "%H:%M %d-%m-%Y").strftime('%Y-%m-%dT%H:%M:%S.000+0000')
+                else:
+                    started = datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S.000+0000')
             except ValueError:
-                flash(f"Invalid date format for task {task_name}. Use YYYY-MM-DD HH:MM.", 'danger')
-                continue
-            dry_run_results.append((issue_key, time_spent, started))
-        if not dry_run_results:
-            flash("No valid tasks to process.", 'info')
-            return redirect(request.url)
-        # Actually log work
-        for issue_key, time_spent, started in dry_run_results:
+                flash("Invalid date format. Use HH:MM DD-MM-YYYY.", 'danger')
+                return render_template('log_time.html', issue_key=issue_key, summary=summary, time_spent=time_spent, date_input=date_input, dry_run=True)
             success, msg = log_work(issue_key, time_spent, started)
             flash(msg, 'success' if success else 'danger')
-        return redirect(url_for('index'))
-    return render_template('upload_file.html')
+            # Do NOT clear or update session['tasks'] here, just redirect
+            return redirect(url_for('index'))
+    return render_template('log_time.html', issue_key=issue_key, summary=summary, time_spent=time_spent, date_input=date_input, dry_run=dry_run)
 
 @app.route('/log_time_multiple', methods=['POST', 'GET'])
 def log_time_multiple():
@@ -265,6 +243,20 @@ def log_time_multiple_individual():
         key_to_summary = {t['key']: t['fields']['summary'] for t in all_tasks}
         selected_task_info = [(key, key_to_summary.get(key, '')) for key in selected_tasks]
         return render_template('log_time_multiple_individual.html', selected_tasks=selected_tasks, selected_task_info=selected_task_info)
+
+@app.route('/excel_log', methods=['GET', 'POST'])
+def excel_log():
+    value1 = ''
+    value2 = ''
+    result = None
+    if request.method == 'POST':
+        value1 = request.form.get('value1', '')  # Name
+        value2 = request.form.get('value2', '')  # Date
+        if value1 and value2:
+            cell = get_excel_entry(value2, value1, file_path='jira/BSP-G2_Daily_Tracker.xlsx')
+            # Pass the cell as-is, do not replace newlines
+            result = cell
+    return render_template('excel_log.html', value1=value1, value2=value2, result=result)
 
 if __name__ == '__main__':
     app.run(debug=True)

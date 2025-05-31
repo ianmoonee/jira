@@ -79,7 +79,7 @@
                             <input type="text" class="form-control" name="time_spent_{{ key }}" value="{{ per_task_data[loop.index0].time_spent if dry_run else '' }}" required placeholder="e.g. 1h30m">
                         </td>
                         <td>
-                            <input type="text" class="form-control date-input" name="date_input_{{ key }}" value="{{ per_task_data[loop.index0].date_input if dry_run else '' }}" placeholder="HH:MM DD-MM-YYYY">
+                            <input type="text" class="form-control date-input" name="date_input_{{ key }}" placeholder="Start Date (HH:MM DD-MM-YYYY, default is now)" value="{{ per_task_data[loop.index0].date_input if dry_run else '' }}">
                         </td>
                         {% if dry_run %}
                         <td>
@@ -100,10 +100,8 @@
             {% set all_ok = per_task_data|selectattr('status', 'equalto', 'ok')|list|length == per_task_data|length %}
             <button type="submit" name="dry_run" value="1" class="btn btn-primary">Dry Run Again</button>
             <button type="submit" name="confirm" value="1" class="btn btn-success ms-2" {% if not all_ok %}disabled{% endif %}>Confirm and Log All</button>
-            <a href="{{ url_for('index') }}" class="btn btn-secondary ms-2">Cancel</a>
         {% else %}
             <button type="submit" name="dry_run" value="1" class="btn btn-primary">Dry Run</button>
-            <a href="{{ url_for('index') }}" class="btn btn-secondary">Cancel</a>
         {% endif %}
     </form>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -113,7 +111,7 @@
             enableTime: true,
             dateFormat: "H:i d-m-Y",
             time_24hr: true,
-            defaultDate: new Date(),
+            defaultDate: input.value || new Date(),
         });
     });
     // Dark mode switch

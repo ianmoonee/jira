@@ -109,7 +109,7 @@
             </div>
             <div class="mb-3">
                 <label for="date_input" class="form-label">Start Date (HH:MM DD-MM-YYYY, default is now):</label>
-                <input type="text" class="form-control" id="date_input" name="date_input" value="{{ date_input if date_input else '' }}">
+                <input type="text" class="form-control" id="date_input" name="date_input" placeholder="Start Date (HH:MM DD-MM-YYYY, default is now)" value="{{ date_input }}">
             </div>
             <div class="mb-3">
                 <label class="form-label">Selected Tasks:</label>
@@ -119,9 +119,10 @@
                     {% endfor %}
                 </ul>
             </div>
-            <button type="submit" class="btn btn-primary">Dry Run</button>
-            <button type="submit" name="per_task_form" value="1" class="btn btn-info ms-2">Log Each Task Individually</button>
-            <a href="{{ url_for('index') }}" class="btn btn-secondary">Cancel</a>
+            <div class="mb-3">
+                <button type="submit" class="btn btn-primary">Dry Run</button>
+                <button type="submit" name="per_task_form" value="1" class="btn btn-info ms-2">Log Each Task Individually</button>
+            </div>
         </form>
         <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
         <script>
@@ -131,8 +132,8 @@
             flatpickr(dateInput, {
                 enableTime: true,
                 dateFormat: "H:i d-m-Y",
-                time_24hr: true
-                // Do NOT set defaultDate, let the input value be used
+                time_24hr: true,
+                defaultDate: document.getElementById('date_input').value || new Date(),
             });
         }
         </script>

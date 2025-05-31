@@ -125,12 +125,16 @@
         </form>
         <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
         <script>
-        flatpickr("#date_input", {
-            enableTime: true,
-            dateFormat: "H:i d-m-Y",
-            time_24hr: true,
-            defaultDate: document.getElementById('date_input').value || new Date(),
-        });
+        // Only initialize flatpickr if the input exists
+        var dateInput = document.getElementById('date_input');
+        if (dateInput) {
+            flatpickr(dateInput, {
+                enableTime: true,
+                dateFormat: "H:i d-m-Y",
+                time_24hr: true
+                // Do NOT set defaultDate, let the input value be used
+            });
+        }
         </script>
     {% endif %}
 </div>

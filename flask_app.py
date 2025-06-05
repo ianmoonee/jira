@@ -248,13 +248,26 @@ def log_time_multiple_individual():
     else:
         # GET: parse selected_tasks from query string
         selected_tasks = request.args.getlist('selected_tasks')
+        default_date = request.args.get('default_date')
         if not selected_tasks:
             flash('No tasks selected.', 'danger')
             return redirect(url_for('index'))
         all_tasks, _ = get_assigned_tasks()
         key_to_summary = {t['key']: t['fields']['summary'] for t in all_tasks}
         selected_task_info = [(key, key_to_summary.get(key, '')) for key in selected_tasks]
-        return render_template('log_time_multiple_individual.html', selected_tasks=selected_tasks, selected_task_info=selected_task_info)
+        # If default_date is present, format as 09:00 DD-MM-YYYY if only a date, else use as is
+        default_date_input = None
+        if default_date:
+            for fmt in ('%d-%m-%Y', '%d/%m/%Y'):
+                try:
+                    dt = datetime.datetime.strptime(default_date, fmt)
+                    default_date_input = dt.strftime('09:00 %d-%m-%Y')
+                    break
+                except Exception:
+                    continue
+            if not default_date_input:
+                default_date_input = default_date
+        return render_template('log_time_multiple_individual.html', selected_tasks=selected_tasks, selected_task_info=selected_task_info, default_date_input=default_date_input)
 
 @app.route('/excel_log', methods=['GET', 'POST'])
 def excel_log():
@@ -408,7 +421,8 @@ def log_from_excel_cell():
     if not matched_keys:
         flash('No valid tasks found in Excel cell.', 'danger')
         return redirect(url_for('excel_log'))
-    return redirect(url_for('log_time_multiple_individual', **{'selected_tasks': list(matched_keys)}))
+    # Pass the searched date as default_date to the log_time_multiple_individual page
+    return redirect(url_for('log_time_multiple_individual', **{'selected_tasks': list(matched_keys), 'default_date': value2}))
 
 def sanitize_filename(filename):
     """Allow only filenames under the jira directory, no path traversal."""
@@ -426,4 +440,4 @@ def sanitize_text(text, max_length=100):
     return escape(str(text)[:max_length])
 
 if __name__ == '__main__':
-    app.run(debug=False)
+    app.run(debug=True)

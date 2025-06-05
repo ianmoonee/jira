@@ -79,7 +79,7 @@
                             <input type="text" class="form-control" name="time_spent_{{ key }}" value="{{ per_task_data[loop.index0].time_spent if dry_run else '' }}" required placeholder="e.g. 1h30m">
                         </td>
                         <td>
-                            <input type="text" class="form-control date-input" name="date_input_{{ key }}" placeholder="Start Date (HH:MM DD-MM-YYYY, default is now)" value="{{ per_task_data[loop.index0].date_input if dry_run else '' }}" autocomplete="off" data-allow-input="true">
+                            <input type="text" class="form-control date-input" name="date_input_{{ key }}" placeholder="Start Date (HH:MM DD-MM-YYYY, default is now)" value="{% if dry_run %}{{ per_task_data[loop.index0].date_input }}{% elif default_date_input %}{{ default_date_input }}{% else %}{% endif %}" autocomplete="off" data-allow-input="true">
                         </td>
                         {% if dry_run %}
                         <td>

@@ -258,5 +258,139 @@ def excel_log():
             result = cell
     return render_template('excel_log.html', value1=value1, value2=value2, result=result)
 
+@app.route('/read_tasks', methods=['GET'])
+def read_tasks():
+    return render_template('read_tasks.html')
+
+@app.route('/process_read_tasks', methods=['POST'])
+def process_read_tasks():
+    import re
+    input_text = request.form.get('tasklist', '')
+    if not input_text:
+        flash('No tasks provided.', 'danger')
+        return redirect(url_for('read_tasks'))
+
+    lines = [line.strip('-').strip() for line in input_text.splitlines() if line.strip()]
+    all_tasks, _ = get_assigned_tasks()
+    summary_to_key = {t['fields']['summary']: t['key'] for t in all_tasks}
+    matched_keys = set()
+
+    for line in lines:
+        lowered = line.lower()
+
+        # Extract verb
+        verb_match = re.search(r'\b(author|review|rework)\b', lowered)
+        verb = verb_match.group(1).capitalize() if verb_match else None
+
+        # Normalize verb to task summary keyword
+        if verb in ['Author', 'Rework']:
+            summary_verb = 'Authoring'
+        elif verb == 'Review':
+            summary_verb = 'Review'
+        else:
+            continue  # skip if verb not found
+
+        # Extract type and base
+        match = re.search(
+            r'\b(?:author|review|rework)[^a-zA-Z0-9]*\d*\s*(tcs?/tps?|tps?/tcs?|tcs?|tps?)?\s*([a-zA-Z0-9_]+)\s*$',
+            lowered,
+            re.IGNORECASE
+        )
+        if not match:
+            continue  # skip invalid line
+
+        type_indicator = match.group(1)
+        base = match.group(2)
+
+        # Determine types to match
+        if type_indicator and 'tc' in type_indicator.lower() and 'tp' in type_indicator.lower():
+            types_to_check = ['TC', 'TP']
+        elif type_indicator:
+            if 'tc' in type_indicator.lower():
+                types_to_check = ['TC']
+            elif 'tp' in type_indicator.lower():
+                types_to_check = ['TP']
+            else:
+                types_to_check = [None]
+        else:
+            types_to_check = [None]
+
+        # Match task summaries
+        for summary, key in summary_to_key.items():
+            normalized_summary = re.sub(r'\s+', ' ', summary)
+            if summary_verb not in normalized_summary:
+                continue
+            if base.lower() not in normalized_summary.lower():
+                continue
+            if types_to_check == [None]:
+                matched_keys.add(key)
+            else:
+                for typ in types_to_check:
+                    if re.search(r'\b' + re.escape(typ) + r'\b', normalized_summary):
+                        matched_keys.add(key)
+
+    if not matched_keys:
+        flash('No valid tasks found from input.', 'danger')
+        return redirect(url_for('read_tasks'))
+
+    return redirect(url_for('log_time_multiple_individual', **{'selected_tasks': list(matched_keys)}))
+
+
+@app.route('/log_from_excel_cell', methods=['POST'])
+def log_from_excel_cell():
+    value1 = request.form.get('value1', '')
+    value2 = request.form.get('value2', '')
+    if not value1 or not value2:
+        flash('Name and date are required.', 'danger')
+        return redirect(url_for('excel_log'))
+    cell = get_excel_entry(value2, value1, file_path='jira/BSP-G2_Daily_Tracker.xlsx')
+    if not cell:
+        flash('No cell data found.', 'danger')
+        return redirect(url_for('excel_log'))
+    # Parse tasks from cell (split by lines, remove empty)
+    lines = [line.strip('-').strip() for line in str(cell).splitlines() if line.strip()]
+    all_tasks, _ = get_assigned_tasks()
+    summary_to_key = {t['fields']['summary']: t['key'] for t in all_tasks}
+    matched_keys = set()
+    for line in lines:
+        lowered = line.lower()
+        # Extract verb (author, review, rework)
+        verb_match = re.search(r'\b(author|review|rework)\b', lowered)
+        verb = verb_match.group(1).capitalize() if verb_match else None
+        verb_map = {'Author': 'Authoring', 'Review': 'Review', 'Rework': 'Authoring'}
+        summary_verb = verb_map.get(verb, None)
+        if summary_verb:
+            match = re.search(r'(?:' + verb.lower() + r')[^a-zA-Z0-9]*\d*\s*(?:tcs?/tps?|tps?/tcs?|tcs?|tps?)?\s*([a-zA-Z0-9_]+)\s*$', line, re.IGNORECASE)
+            if match:
+                base = match.group(1)
+                has_tc = re.search(r'\bTCs?\b', line, re.IGNORECASE)
+                has_tp = re.search(r'\bTPs?\b', line, re.IGNORECASE)
+                has_both = re.search(r'(TCs?/TPs?|TPs?/TCs?)', line, re.IGNORECASE)
+                types_to_check = []
+                if has_both or (has_tc and has_tp):
+                    types_to_check = ['TC', 'TP']
+                elif has_tc:
+                    types_to_check = ['TC']
+                elif has_tp:
+                    types_to_check = ['TP']
+                else:
+                    types_to_check = [None]
+                for typ in types_to_check:
+                    for summary, key in summary_to_key.items():
+                        if summary_verb in summary and base.lower() in summary.lower():
+                            if typ:
+                                if re.search(r'\b' + typ + r'\b', summary):
+                                    matched_keys.add(key)
+                            else:
+                                matched_keys.add(key)
+        else:
+            for summary, key in summary_to_key.items():
+                if line.lower() in summary.lower():
+                    matched_keys.add(key)
+    if not matched_keys:
+        flash('No valid tasks found in Excel cell.', 'danger')
+        return redirect(url_for('excel_log'))
+    return redirect(url_for('log_time_multiple_individual', **{'selected_tasks': list(matched_keys)}))
+
 if __name__ == '__main__':
     app.run(debug=True)

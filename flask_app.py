@@ -5,19 +5,22 @@ import os
 import re
 import pandas as pd
 from jiraLogger import get_excel_entry
+import pathlib
+from markupsafe import escape
 
 app = Flask(__name__)
-app.secret_key = 'your_secret_key'  # Change this!
 
 JIRA_DOMAIN = 'https://jira.critical.pt'
 
 def get_pat():
+    """Retrieve the JIRA Personal Access Token from session or environment."""
     pat = session.get('JIRA_PAT')
     if not pat:
         pat = os.getenv('JIRA_PAT')
     return pat
 
 def get_headers():
+    """Return headers for JIRA API requests, including authorization if available."""
     pat = get_pat()
     return {
         'Authorization': f'Bearer {pat}' if pat else '',
@@ -27,6 +30,7 @@ def get_headers():
 
 @app.before_request
 def require_pat():
+    """Require a JIRA PAT for all endpoints except set_pat and static files."""
     if request.endpoint not in ('set_pat', 'static'):
         pat = get_pat()
         if not pat:
@@ -34,6 +38,7 @@ def require_pat():
 
 @app.route('/set_pat', methods=['GET', 'POST'])
 def set_pat():
+    """Allow the user to set their JIRA PAT via a form."""
     if request.method == 'POST':
         pat = request.form.get('pat')
         if pat:
@@ -45,6 +50,7 @@ def set_pat():
     return render_template('set_pat.html')
 
 def get_assigned_tasks():
+    """Fetch all tasks assigned to the current user from JIRA."""
     assigned_url = f'{JIRA_DOMAIN}/rest/api/2/search'
     jql = 'assignee = currentUser() ORDER BY updated DESC'
     params = {'jql': jql, 'maxResults': 100}
@@ -55,6 +61,7 @@ def get_assigned_tasks():
     return issues, None
 
 def log_work(issue_key, time_spent, started):
+    """Log work for a given JIRA issue key."""
     worklog_url = f'{JIRA_DOMAIN}/rest/api/2/issue/{issue_key}/worklog'
     worklog_payload = {
         "started": started,
@@ -68,6 +75,7 @@ def log_work(issue_key, time_spent, started):
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
+    """Main page: show tasks, allow filtering and sorting."""
     # Default sort by summary, descending
     sort_by = request.args.get('sort_by', 'summary')
     sort_order = request.args.get('sort_order', 'desc')
@@ -99,6 +107,8 @@ def index():
 
 @app.route('/log_time/<issue_key>', methods=['GET', 'POST'])
 def log_time(issue_key):
+    """Log time for a single JIRA issue."""
+    issue_key = sanitize_text(issue_key, max_length=20)
     time_spent = ''
     date_input = ''
     dry_run = False
@@ -130,8 +140,9 @@ def log_time(issue_key):
 
 @app.route('/log_time_multiple', methods=['POST', 'GET'])
 def log_time_multiple():
+    """Log time for multiple selected JIRA issues at once."""
     if request.method == 'POST':
-        selected_tasks = request.form.getlist('selected_tasks')
+        selected_tasks = [sanitize_text(k, max_length=20) for k in request.form.getlist('selected_tasks')]
         if not selected_tasks:
             flash('No tasks selected.', 'danger')
             return redirect(url_for('index'))
@@ -140,8 +151,8 @@ def log_time_multiple():
         selected_task_info = [(key, key_to_summary.get(key, '')) for key in selected_tasks]
         if 'confirm' in request.form:
             # Actually log work after dry run
-            time_spent = request.form['time_spent']
-            date_input = request.form['date_input']
+            time_spent = sanitize_text(request.form['time_spent'], max_length=20)
+            date_input = sanitize_text(request.form['date_input'], max_length=30)
             try:
                 if date_input:
                     started = datetime.datetime.strptime(date_input, "%H:%M %d-%m-%Y").strftime('%Y-%m-%dT%H:%M:%S.000+0000')
@@ -156,8 +167,8 @@ def log_time_multiple():
             return redirect(url_for('index'))
         elif 'time_spent' in request.form:
             # Always show dry run before logging
-            time_spent = request.form['time_spent']
-            date_input = request.form['date_input']
+            time_spent = sanitize_text(request.form['time_spent'], max_length=20)
+            date_input = sanitize_text(request.form['date_input'], max_length=30)
             return render_template('log_time_multiple.html', selected_tasks=selected_tasks, selected_task_info=selected_task_info, time_spent=time_spent, date_input=date_input, dry_run=True)
         else:
             now = datetime.datetime.now().strftime('%H:%M %d-%m-%Y')
@@ -167,12 +178,13 @@ def log_time_multiple():
 
 @app.route('/log_time_multiple_individual', methods=['GET', 'POST'])
 def log_time_multiple_individual():
+    """Log time for multiple JIRA issues, each with individual time/date."""
     def is_valid_time_spent(val):
-        # Accepts formats like 1h, 10m, 1h10m, 10h10m, etc. (at least one of h or m)
+        """Check if the time spent string is valid (e.g. 1h, 10m, 1h10m)."""
         return bool(re.fullmatch(r'([0-9]+h)?([0-9]+m)?', val.strip())) and val.strip() != ''
 
     def parse_time_spent(val):
-        # Returns (hours, minutes) as integers
+        """Parse a time spent string into hours and minutes as integers."""
         match = re.fullmatch(r'(?:(\d+)h)?(?:(\d+)m)?', val.strip())
         if not match:
             return 0, 0
@@ -181,7 +193,7 @@ def log_time_multiple_individual():
         return hours, minutes
 
     if request.method == 'POST':
-        selected_tasks = request.form.getlist('selected_tasks')
+        selected_tasks = [sanitize_text(k, max_length=20) for k in request.form.getlist('selected_tasks')]
         if not selected_tasks:
             flash('No tasks selected.', 'danger')
             return redirect(url_for('index'))
@@ -192,8 +204,8 @@ def log_time_multiple_individual():
             # Show dry run summary with status for each
             per_task_data = []
             for key in selected_tasks:
-                time_spent = request.form.get(f'time_spent_{key}')
-                date_input = request.form.get(f'date_input_{key}')
+                time_spent = sanitize_text(request.form.get(f'time_spent_{key}'), max_length=20)
+                date_input = sanitize_text(request.form.get(f'date_input_{key}'), max_length=30)
                 status = 'ok'
                 # Validate input
                 if not time_spent or not is_valid_time_spent(time_spent):
@@ -208,8 +220,8 @@ def log_time_multiple_individual():
         elif 'confirm' in request.form:
             # Actually log work for all tasks
             for key in selected_tasks:
-                time_spent = request.form.get(f'time_spent_{key}')
-                date_input = request.form.get(f'date_input_{key}')
+                time_spent = sanitize_text(request.form.get(f'time_spent_{key}'), max_length=20)
+                date_input = sanitize_text(request.form.get(f'date_input_{key}'), max_length=30)
                 if not time_spent or not is_valid_time_spent(time_spent):
                     flash(f"Invalid time for {key}. Use e.g. 1h10m, 10m, 2h", 'danger')
                     return redirect(request.url)
@@ -246,24 +258,28 @@ def log_time_multiple_individual():
 
 @app.route('/excel_log', methods=['GET', 'POST'])
 def excel_log():
+    """Show a form to fetch a cell from an Excel file, with editable file path."""
     value1 = ''
     value2 = ''
+    file_path = 'BSP-G2_Daily_Tracker.xlsx'
     result = None
     if request.method == 'POST':
-        value1 = request.form.get('value1', '')  # Name
-        value2 = request.form.get('value2', '')  # Date
-        if value1 and value2:
-            cell = get_excel_entry(value2, value1, file_path='jira/BSP-G2_Daily_Tracker.xlsx')
-            # Pass the cell as-is, do not replace newlines
+        value1 = sanitize_text(request.form.get('value1', ''))  # Name
+        value2 = sanitize_text(request.form.get('value2', ''))  # Date
+        file_path = sanitize_filename(request.form.get('file_path', file_path))
+        if value1 and value2 and file_path:
+            cell = get_excel_entry(value2, value1, file_path=file_path)
             result = cell
-    return render_template('excel_log.html', value1=value1, value2=value2, result=result)
+    return render_template('excel_log.html', value1=value1, value2=value2, file_path=file_path, result=result)
 
 @app.route('/read_tasks', methods=['GET'])
 def read_tasks():
+    """Show the form to paste or enter a list of tasks for matching."""
     return render_template('read_tasks.html')
 
 @app.route('/process_read_tasks', methods=['POST'])
 def process_read_tasks():
+    """Process pasted task lines, match to JIRA summaries, and redirect to log page."""
     import re
     input_text = request.form.get('tasklist', '')
     if not input_text:
@@ -338,12 +354,14 @@ def process_read_tasks():
 
 @app.route('/log_from_excel_cell', methods=['POST'])
 def log_from_excel_cell():
-    value1 = request.form.get('value1', '')
-    value2 = request.form.get('value2', '')
-    if not value1 or not value2:
-        flash('Name and date are required.', 'danger')
+    """Process tasks from an Excel cell, match to JIRA summaries, and redirect to log page."""
+    value1 = sanitize_text(request.form.get('value1', ''))
+    value2 = sanitize_text(request.form.get('value2', ''))
+    file_path = sanitize_filename(request.form.get('file_path', 'BSP-G2_Daily_Tracker.xlsx'))
+    if not value1 or not value2 or not file_path:
+        flash('Name, date, and file path are required.', 'danger')
         return redirect(url_for('excel_log'))
-    cell = get_excel_entry(value2, value1, file_path='jira/BSP-G2_Daily_Tracker.xlsx')
+    cell = get_excel_entry(value2, value1, file_path=file_path)
     if not cell:
         flash('No cell data found.', 'danger')
         return redirect(url_for('excel_log'))
@@ -392,5 +410,20 @@ def log_from_excel_cell():
         return redirect(url_for('excel_log'))
     return redirect(url_for('log_time_multiple_individual', **{'selected_tasks': list(matched_keys)}))
 
+def sanitize_filename(filename):
+    """Allow only filenames under the jira directory, no path traversal."""
+    base_dir = pathlib.Path('jira').resolve()
+    try:
+        file_path = (base_dir / filename).resolve()
+        if not str(file_path).startswith(str(base_dir)):
+            raise ValueError('Invalid file path')
+        return str(file_path)
+    except Exception:
+        return str(base_dir / 'BSP-G2_Daily_Tracker.xlsx')
+
+def sanitize_text(text, max_length=100):
+    """Escape and trim user text input."""
+    return escape(str(text)[:max_length])
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=False)

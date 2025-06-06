@@ -9,6 +9,7 @@ import pathlib
 from markupsafe import escape
 
 app = Flask(__name__)
+app.secret_key = 'asdasd'  # Replace with a random, secure value
 
 JIRA_DOMAIN = 'https://jira.critical.pt'
 

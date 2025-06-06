@@ -73,26 +73,18 @@ def log_work(issue_key, time_spent, started):
 @app.route('/', methods=['GET', 'POST'])
 def index():
     """Main page: show tasks, allow filtering and sorting."""
-    # Default sort by summary, descending
     sort_by = request.args.get('sort_by', 'summary')
     sort_order = request.args.get('sort_order', 'desc')
     filter_keyword = request.form.get('filter', '').lower() if request.method == 'POST' else request.args.get('filter', '').lower()
-    tasks = []
-    error = None
-    fetch_requested = (request.method == 'GET' and request.args.get('fetch') == '1')
-    filter_requested = (request.method == 'POST' and filter_keyword) or (request.method == 'GET' and filter_keyword)
 
-    if fetch_requested or filter_requested:
-        # Fetch from JIRA and do NOT store in session
-        tasks, error = get_assigned_tasks()
-        if error:
-            flash(error, 'danger')
-            tasks = []
-        if filter_keyword:
-            tasks = [t for t in tasks if filter_keyword in t['fields']['summary'].lower()]
-    else:
-        # If not fetching/filtering, do not use session, just show empty or prompt user to fetch
+    # Always fetch tasks when loading the page
+    tasks, error = get_assigned_tasks()
+    if error:
+        flash(error, 'danger')
         tasks = []
+    if filter_keyword:
+        tasks = [t for t in tasks if filter_keyword in t['fields']['summary'].lower()]
+
     # Sorting
     if tasks:
         reverse = (sort_order == 'desc')

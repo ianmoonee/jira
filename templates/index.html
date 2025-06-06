@@ -137,6 +137,9 @@
     <form id="individual-form" method="get" action="{{ url_for('log_time_multiple_individual') }}" style="display:none;">
         <!-- Only include checked tasks -->
     </form>
+    <form action="{{ url_for('clear_pat') }}" method="get" style="display:inline;">
+        <button type="submit" class="btn btn-warning">Clear PAT</button>
+    </form>
     <script>
     document.getElementById('log-individual-btn').onclick = function() {
         var form = document.getElementById('individual-form');

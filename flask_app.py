@@ -14,11 +14,8 @@ app.secret_key = 'asdasd'  # Replace with a random, secure value
 JIRA_DOMAIN = 'https://jira.critical.pt'
 
 def get_pat():
-    """Retrieve the JIRA Personal Access Token from session or environment."""
-    pat = session.get('JIRA_PAT')
-    if not pat:
-        pat = os.getenv('JIRA_PAT')
-    return pat
+    """Retrieve the JIRA Personal Access Token from session only."""
+    return session.get('JIRA_PAT')
 
 def get_headers():
     """Return headers for JIRA API requests, including authorization if available."""
@@ -424,6 +421,12 @@ def log_from_excel_cell():
         return redirect(url_for('excel_log'))
     # Pass the searched date as default_date to the log_time_multiple_individual page
     return redirect(url_for('log_time_multiple_individual', **{'selected_tasks': list(matched_keys), 'default_date': value2}))
+
+@app.route('/clear_pat')
+def clear_pat():
+    session.pop('JIRA_PAT', None)
+    flash('PAT cleared from session.', 'success')
+    return redirect(url_for('set_pat'))
 
 def sanitize_filename(filename):
     """Allow only filenames under the jira directory, no path traversal."""

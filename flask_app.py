@@ -263,7 +263,7 @@ def excel_log():
     """Show a form to fetch a cell from an Excel file, with editable file path."""
     value1 = ''
     value2 = ''
-    file_path = 'BSP-G2_Daily_Tracker.xlsx'
+    file_path = '/mnt/c/Users/peserrano/OneDrive - CRITICAL SOFTWARE, S.A/BSP_G2/BSP-G2_Daily_Tracker.xlsx'
     result = None
     if request.method == 'POST':
         value1 = sanitize_text(request.form.get('value1', ''))  # Name
@@ -420,15 +420,15 @@ def clear_pat():
     return redirect(url_for('set_pat'))
 
 def sanitize_filename(filename):
-    """Allow only filenames under the jira directory, no path traversal."""
-    base_dir = pathlib.Path('jira').resolve()
-    try:
-        file_path = (base_dir / filename).resolve()
-        if not str(file_path).startswith(str(base_dir)):
-            raise ValueError('Invalid file path')
-        return str(file_path)
-    except Exception:
-        return str(base_dir / 'BSP-G2_Daily_Tracker.xlsx')
+    """Allow any path, but block path traversal and suspicious characters."""
+    filename = str(filename)
+    # Disallow path traversal
+    if '..' in filename or filename.strip() == '':
+        return 'BSP-G2_Daily_Tracker.xlsx'
+    # Optionally, allow only certain file extensions (e.g., .xlsx)
+    if not filename.lower().endswith('.xlsx'):
+        return 'BSP-G2_Daily_Tracker.xlsx'
+    return filename
 
 def sanitize_text(text, max_length=100):
     """Escape and trim user text input."""

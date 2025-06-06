@@ -1,7 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 import requests
 import datetime
-import os
 import re
 import pandas as pd
 from jiraLogger import get_excel_entry
